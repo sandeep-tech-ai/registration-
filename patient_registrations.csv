@@ -1,0 +1,5 @@
+S.No.,Patient Name,Gender,Date of Birth,Phone Number,Aadhar Number,Type of Registration,Date of Registration,Timestamp,Patient ID,District,Mandal
+1.0,Sandeep,Male,2004-01-13,8019701793,498378938437,New Patient,2026-04-14,2026-04-13 12:38:44,,,
+2.0,Sandeep,Male,2000-01-20,80191991929,829292929292,Follow-up,2026-04-01,2026-04-13 12:39:12,,,
+,Sandeep,Male,2000-01-01,8019701793,123456789123,New Patient,2026-04-13,2026-04-13 15:08:13,bhspl1234,NTR (Vijayawada),Vijayawada Urban
+,Sandeep,Male,2000-01-01,8019701793,123456789122,New Patient,2026-04-13,2026-04-13 15:10:29,bhspl1234,NTR (Vijayawada),Vijayawada Urban
