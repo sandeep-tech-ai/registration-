@@ -1,117 +1,86 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+import os
+from passlib.context import CryptContext
+from datetime import datetime
 
-# ====================== CONFIG ======================
-st.set_page_config(
-    page_title="Patient Registration Form",
-    page_icon="🏥",
-    layout="wide"
-)
+# MUST be the first Streamlit command
+st.set_page_config(page_title="BHSPL Patient System", page_icon="🏥", layout="wide")
 
-DATA_FILE = "patient_registrations.csv"
+# ====================== PASSWORD HASHING ======================
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Load or create data
-if "df" not in st.session_state:
+def hash_password(password: str) -> str:
+    if len(password) > 72: password = password[:72]
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        df = pd.read_csv(DATA_FILE)
-    except FileNotFoundError:
-        df = pd.DataFrame(columns=[
-            "S.No.", "Patient Name", "Gender", "Date of Birth",
-            "Phone Number", "Aadhar Number", "Type of Registration",
-            "Date of Registration", "Timestamp"
-        ])
-    st.session_state.df = df
+        if len(plain_password) > 72: plain_password = plain_password[:72]
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception: return False
 
-# ====================== TITLE ======================
-st.title("🏥 Patient Registration System")
-st.markdown("### Simple & Clean Registration Form (Built with Streamlit + Python)")
+# ====================== DATA FILES ======================
+USERS_FILE = "users.csv"
+REG_FILE = "patient_registrations.csv"
 
-# ====================== REGISTRATION FORM ======================
-with st.form("registration_form", clear_on_submit=True):
-    col1, col2 = st.columns(2)
+def init_files():
+    if not os.path.exists(USERS_FILE):
+        hashed = hash_password("admin123")
+        pd.DataFrame({
+            "username": ["admin"], "password": [hashed],
+            "role": ["admin"], "name": ["Administrator"]
+        }).to_csv(USERS_FILE, index=False)
+    
+    if not os.path.exists(REG_FILE):
+        pd.DataFrame(columns=[
+            "Patient ID", "Patient Name", "Gender", "Date of Birth",
+            "Phone Number", "Aadhar Number", "District", "Mandal", 
+            "Type of Registration", "Date of Registration", "Timestamp"
+        ]).to_csv(REG_FILE, index=False)
 
-    with col1:
-        patient_name = st.text_input("Patient Name *", placeholder="Enter full name")
-        gender = st.selectbox("Gender *", ["Male", "Female", "Other"])
-        dob = st.date_input("Date of Birth", value=date(2000, 1, 1))
+init_files()
 
-    with col2:
-        phone = st.text_input("Phone Number *", placeholder="10-digit mobile number")
-        aadhar = st.text_input("Aadhar Number", placeholder="12-digit Aadhar number")
-        reg_type = st.selectbox(
-            "Type of Registration *",
-            ["New Patient", "Follow-up", "Emergency", "Referral", "Insurance"]
-        )
+# ====================== SESSION STATE ======================
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
+if "username" not in st.session_state: st.session_state.username = ""
+if "role" not in st.session_state: st.session_state.role = ""
 
-    reg_date = st.date_input("Date of Registration", value=date.today())
+# ====================== LOGIN PAGE ======================
+if not st.session_state.logged_in:
+    st.title("🏥 BHSPL Patient Management System")
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("Login", type="primary"):
+            users_df = pd.read_csv(USERS_FILE)
+            user_row = users_df[users_df["username"] == username]
+            if not user_row.empty and verify_password(password, user_row.iloc[0]["password"]):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.session_state.role = user_row.iloc[0]["role"]
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+    st.stop()
 
-    # Submit button
-    submitted = st.form_submit_button("✅ Submit Registration", type="primary", use_container_width=True)
+# ====================== SIDEBAR ======================
+st.sidebar.success(f"Logged in: **{st.session_state.username}**")
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.rerun()
 
-    if submitted:
-        # Basic validation
-        if not patient_name.strip():
-            st.error("❌ Patient Name is required!")
-        elif not phone.strip():
-            st.error("❌ Phone Number is required!")
-        else:
-            # Create new row
-            new_row = {
-                "S.No.": len(st.session_state.df) + 1,
-                "Patient Name": patient_name.strip().title(),
-                "Gender": gender,
-                "Date of Birth": dob,
-                "Phone Number": phone.strip(),
-                "Aadhar Number": aadhar.strip(),
-                "Type of Registration": reg_type,
-                "Date of Registration": reg_date,
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
+nav_options = ["Registration", "Vitals Entry"]
+if st.session_state.role == "admin":
+    nav_options += ["View All Data", "Manage Users"]
 
-            # Add to dataframe
-            st.session_state.df = pd.concat(
-                [st.session_state.df, pd.DataFrame([new_row])], 
-                ignore_index=True
-            )
+page = st.sidebar.radio("Navigation", nav_options)
 
-            # Save to CSV
-            st.session_state.df.to_csv(DATA_FILE, index=False)
-
-            st.success(f"🎉 Patient **{patient_name.strip().title()}** registered successfully!")
-            st.balloons()
-
-# ====================== VIEW ALL REGISTRATIONS ======================
-st.divider()
-st.subheader("📋 All Registered Patients")
-
-if len(st.session_state.df) > 0:
-    # Display table
-    st.dataframe(
-        st.session_state.df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # Download button
-    csv = st.session_state.df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Full Data as CSV",
-        data=csv,
-        file_name="patient_registrations.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-    # Optional: Clear all data button (with confirmation)
-    if st.button("🗑️ Clear All Records", type="secondary"):
-        if st.checkbox("Are you sure? This cannot be undone!"):
-            st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns)
-            st.session_state.df.to_csv(DATA_FILE, index=False)
-            st.success("All records cleared!")
-            st.rerun()
-else:
-    st.info("No registrations yet. Fill the form above to get started!")
-
-# ====================== FOOTER ======================
-st.caption("Built with ❤️ using Streamlit + Python | Data saved locally in `patient_registrations.csv`")
+# ====================== PAGE ROUTING ======================
+if page == "Registration":
+    from pages import Registration as reg
+    reg.show_registration()
+elif page == "Vitals Entry":
+    from pages import Vitals as vit
+    vit.show_vitals()
+# ... Rest of admin pages logic remains the same
